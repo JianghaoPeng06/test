@@ -7,6 +7,20 @@
 body{
     background:#f5f5f7;
     font-family:Arial,Helvetica,sans-serif;
+    min-height:100vh;
+    position:relative;
+}
+
+.credit{
+    position:fixed;
+    right:24px;
+    bottom:24px;
+    font-size:24px;
+    font-weight:400;
+    letter-spacing:0.04em;
+    color:#666;
+    pointer-events:none;
+    font-family:inherit;
 }
 
 nav{
@@ -89,15 +103,3 @@ button{
     justify-content:center;
 }
 
-.ball{
-
-    width:420px;
-
-    height:420px;
-
-    border-radius:50%;
-
-    background:radial-gradient(circle at 30% 30%,white,#d0d0d0,#999);
-
-    box-shadow:0 20px 60px rgba(0,0,0,.2);
-}
