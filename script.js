@@ -1,0 +1,1 @@
+console.log("Apple 风格首页启动成功！");
