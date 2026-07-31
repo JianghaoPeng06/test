@@ -1,48 +1,79 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JasperPeng</title>
-
-    <link rel="stylesheet" href="style.css">
+    <!-- 引用外部样式表 -->
+    <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
 
-    <nav>
-        <div class="logo">JasperPeng</div>
-
-        <div class="menu">
-            <a href="#">作品</a>
-            <a href="#">关于</a>
-            <a href="#">世界观</a>
-            <a href="#">联系</a>
-        </div>
+    <!-- ====== 导航栏 ====== -->
+    <nav class="nav">
+        <span class="logo" data-page="home">JasperPeng</span>
+        <ul class="nav-links">
+            <li><a data-page="portfolio" class="active">作品</a></li>
+            <li><a data-page="home">关于</a></li>
+            <li><a data-page="home">世界观</a></li>
+            <li><a data-page="home">联系</a></li>
+        </ul>
     </nav>
 
-    <section class="hero">
+    <!-- ====== 页面容器 ====== -->
+    <div class="page-container">
 
-        <div class="left">
-            <h1>
-                Designing<br>
-                the Future.
-            </h1>
+        <!-- 首页 -->
+        <section id="page-home" class="page active">
+            <div class="main">
+                <h1>Designing<br />the Future.</h1>
+                <p class="description">探索设计、生命、哲学与宇宙。</p>
+                <button class="btn-explore" data-page="portfolio">Explore</button>
+            </div>
+        </section>
 
-            <p>
-                探索设计、生命、哲学与宇宙。
-            </p>
+        <!-- 作品页 -->
+        <section id="page-portfolio" class="page">
+            <div class="page-header">
+                <div class="left">
+                    <h1>作品</h1>
+                    <span class="divider"></span>
+                </div>
+                <span class="back-link" data-page="home">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12" />
+                        <polyline points="12 19 5 12 12 5" />
+                    </svg>
+                    返回首页
+                </span>
+            </div>
+            <div class="grid">
+                <a href="#" class="project-card">
+                    <div class="project-thumb"></div>
+                    <span class="project-title">城市再生计划</span>
+                    <span class="project-tag">建筑设计 · 2026</span>
+                </a>
+                <a href="#" class="project-card">
+                    <div class="project-thumb"></div>
+                    <span class="project-title">冥想空间装置</span>
+                    <span class="project-tag">空间设计 · 2025</span>
+                </a>
+                <a href="#" class="project-card">
+                    <div class="project-thumb"></div>
+                    <span class="project-title">未来字体研究</span>
+                    <span class="project-tag">平面设计 · 2025</span>
+                </a>
+                <a href="#" class="project-card">
+                    <div class="project-thumb"></div>
+                    <span class="project-title">宇宙哲学海报</span>
+                    <span class="project-tag">视觉传达 · 2024</span>
+                </a>
+            </div>
+        </section>
 
-            <button id="exploreBtn" type="button">Explore</button>
-        </div>
+    </div>
 
-        <div class="right"></div>
-
-    </section>
-
-    <div class="credit">Power by 彭江浩</div>
-
+    <!-- 引用外部 JavaScript -->
     <script src="script.js"></script>
-
 </body>
 </html>
