@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="noote-metro 封面占位图">
+  <!-- TODO: replace placeholder with final asset -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#EBEFEC"/><stop offset="1" stop-color="#DCE6DF"/>
+    </linearGradient>
+    <radialGradient id="orb" cx="0.38" cy="0.34" r="0.72">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#A8C4B4"/>
+      <stop offset="1" stop-color="#75907F"/>
+    </radialGradient>
+  </defs>
+  <rect width="800" height="800" fill="url(#bg)"/>
+  <g transform="rotate(-1 400 400)">
+  <rect x='96'  y='150' width='430' height='430' rx='16' fill='#A8C4B4' opacity='0.55'/>
+  <rect x='214' y='236' width='430' height='430' rx='16' fill='#75907F' opacity='0.34'/>
+  <rect x='158' y='196' width='430' height='430' rx='16' fill='none' stroke='#75907F' stroke-width='2' opacity='0.5'/>
+  </g>
+</svg>

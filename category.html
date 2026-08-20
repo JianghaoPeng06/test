@@ -19,7 +19,7 @@
 -->
 <body data-base="{{BASE}}" data-page="category" data-section="{{SECTION}}" data-cat="{{CAT}}">
 
-<a class="skip-link" href="#main">跳到主要内容</a>
+<a class="skip-link" href="#main" data-i18n="skip">跳到主要内容</a>
 
 <!-- #chrome:header:start -->
 <!-- #chrome:header:end -->
@@ -30,9 +30,9 @@
 
   <!-- 通用版式 · 标题区 -->
   <section class="cat-hero wrap">
-    <p class="eyebrow reveal">{{SECTION_LABEL}}</p>
-    <h1 class="h1 reveal">{{TITLE}}</h1>
-    <p class="lede reveal" style="margin-top:var(--sp-md)">{{DESC}}</p>
+    <p class="eyebrow reveal" data-cat-eyebrow>{{SECTION_LABEL}}</p>
+    <h1 class="h1 reveal" data-cat-title>{{TITLE}}</h1>
+    <p class="lede reveal" style="margin-top:var(--sp-md)" data-cat-desc>{{DESC}}</p>
     <p class="cat-hero__count reveal" data-cat-count></p>
   </section>
 
@@ -77,6 +77,7 @@
   <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>
 </button>
 
+<script src="{{BASE}}js/assets.js"></script>
 <script src="{{BASE}}js/data.js"></script>
 <script src="{{BASE}}js/main.js" defer></script>
 </body>
