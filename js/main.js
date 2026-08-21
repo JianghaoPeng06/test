@@ -34,29 +34,22 @@
 
   /* ---------- 图片格式 ----------
      data.js 里只写 slug，真实扩展名来自 build.ps1 生成的 js/assets.js。
-     占位图叫 <slug>.placeholder.svg，不占用 <slug>.png 这个名字 ——
-     换图 = 把 <slug>.png（或 .jpg / .webp）丢进同一个目录，什么都不用删，
-     然后双击根目录的「刷新图片.cmd」。这是正常流程，控制台是干净的。
+     占位图就是真实的 <slug>.png —— 换图 = 用自己的图盖掉同名文件，
+     什么都不用删、连构建都不用跑，刷新页面就是新图。
 
-     兜底 A：图片加载失败时按 IMG_EXT 顺序换扩展名重试。
-             清单过期（换了图还没刷新）时救场。
+     想换成别的格式（.jpg / .webp）也行：丢进同一个目录，
+     再双击根目录的「刷新图片.cmd」让清单重排一次序。
 
-     兜底 B：连「刷新图片.cmd」都不想跑，把下面这行改成 true ——
-             本地预览时会主动探测同名真图，丢完图刷新页面就能看到。
-             代价：探测请求打不中会在控制台留一批 404，功能上无害。
-             只在 localhost 生效，线上永远不发这些请求。 */
-  var AUTO_FIND_IMAGES = false;
-
-  var PH = '.placeholder.svg';
-  var IMG_EXT = ['.png', '.jpg', '.jpeg', '.webp', '.avif', '.svg', PH];
-  var LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+     兜底：图片加载失败时按 IMG_EXT 顺序换扩展名重试 ——
+     清单过期（换了格式还没刷新）时救场。
+     以前那套「主动探测同名真图」（AUTO_FIND_IMAGES）连同它的一堆 404 一起删了：
+     占位图现在就叫 <slug>.png，盖掉就生效，没有可探的东西了。 */
+  var IMG_EXT = ['.png', '.jpg', '.jpeg', '.webp', '.avif', '.gif', '.svg'];
 
   function baseOf(src) {
-    var s = String(src).replace(/[?#].*$/, '');
-    if (s.slice(-PH.length).toLowerCase() === PH) return s.slice(0, -PH.length);
-    return s.replace(/\.[a-z0-9]+$/i, '');
+    return String(src).replace(/[?#].*$/, '').replace(/\.[a-z0-9]+$/i, '');
   }
-  /* A：换扩展名重试 */
+  /* 换扩展名重试 */
   function fixImg(img) {
     var src = img.getAttribute('src') || '';
     if (src.indexOf('assets/images/') < 0) return;
@@ -71,36 +64,6 @@
     if (e.target && e.target.tagName === 'IMG') fixImg(e.target);
   }, true);
 
-  /* B：本地预览时探测新丢进来的真图 */
-  var PROBE_EXT = ['.png', '.jpg', '.webp'];
-  var probed = {};                       /* base → 已探过的结果，同一张封面只探一次 */
-  /* 用 fetch(HEAD) 探，不用 new Image() ——
-     图片加载失败会往控制台写红字，一页十几张就刷屏了；
-     fetch 拿到 404 只是 res.ok === false，控制台干干净净。 */
-  function probeReal(base, done) {
-    if (base in probed) { done(probed[base]); return; }
-    if (!window.fetch) { probed[base] = null; done(null); return; }
-    var i = 0;
-    (function next() {
-      if (i >= PROBE_EXT.length) { probed[base] = null; done(null); return; }
-      var candidate = base + PROBE_EXT[i++];
-      fetch(candidate, { method: 'HEAD', cache: 'no-store' }).then(function (res) {
-        if (res.ok) { probed[base] = candidate; done(candidate); }
-        else next();
-      })['catch'](next);
-    })();
-  }
-  function upgradePlaceholders(root) {
-    if (!AUTO_FIND_IMAGES || !LOCAL) return;
-    $$('img', root || document).forEach(function (img) {
-      var src = img.getAttribute('src') || '';
-      if (src.indexOf('assets/images/') < 0) return;
-      if (src.slice(-PH.length).toLowerCase() !== PH) return;
-      probeReal(baseOf(src), function (found) {
-        if (found && img.getAttribute('src') === src) img.setAttribute('src', found);
-      });
-    });
-  }
   function artUrl(slug) { return url('article.html?a=' + encodeURIComponent(slug)); }
   /* 分类链接。带 to: 的分类不生成自己的页面，直接指向别处
      —— 角色板块的「原创角色」就指向那个固定深色的选角色页。 */
@@ -244,57 +207,113 @@
   /* 展开面板的内容左边缘对齐顶栏第一个导航项（Figma 的排布）。
      不写死 761px —— 中英日文标签宽度不同，量出来才对得上。
      换语言、改窗宽都要重量一次。 */
+  /* 面板换了语言 / 换了窗宽，内容高度也会变，共用背景要跟着重量一次。
+     真正的实现挂在下面的 dropdowns 里，这里先留个空壳，免得调用顺序出错。 */
+  var remeasureMenu = function () {};
   function alignMenus() {
     var hdr = $('[data-header]'), first = $('.nav .nav__link');
     if (!hdr || !first) return;
     if (!isDesktop()) { hdr.style.removeProperty('--menu-left'); return; }
     var l = first.getBoundingClientRect().left;
     hdr.style.setProperty('--menu-left', Math.max(0, Math.round(l)) + 'px');
+    remeasureMenu();
   }
   addEventListener('resize', alignMenus);
 
-  /* ---------- 03 下拉面板 ---------- */
+  /* ---------- 03 下拉面板 ----------
+     六块面板装在同一个舞台 .menu-stage 里，舞台自己就是那块白底。三种情形：
+
+       从无到有   舞台高度 0 → h（这就是帘幕），内容自上而下淡入
+       面板横移   高度 h₁ → h₂ 连续补间，两块内容按指针方向横向交接；
+                  帘幕一步都不播 —— 指针没离开顶栏，这块白底就一直在
+       彻底收起   高度 → 0
+
+     之前是「先 hide 再 show」，横移时先收起又展开，中间必然塌一下。
+     现在 show() 里不再调 hide()，让位的那块走 leave()，两件事同时发生。 */
   (function dropdowns() {
     var triggers = $$('[data-menu]');
-    var scrim = $('[data-scrim]'), hdr = $('[data-header]');
+    var scrim = $('[data-scrim]'), hdr = $('[data-header]'), bg = $('[data-menu-stage]');
     if (!triggers.length) return;
     var open = null, closeT = null, pinned = false;
 
     function panelOf(trg) { return $('#' + trg.getAttribute('aria-controls')); }
+    /* 面板本身没有内外边距，高度就是内容块的高度 */
+    function heightOf(p) { return Math.ceil(p.getBoundingClientRect().height); }
+
+    function setBg(h, swap) {
+      if (!bg) return;
+      bg.classList.toggle('is-swap', !!swap);
+      bg.style.setProperty('--menu-h', h + 'px');
+      bg.classList.add('is-on');
+    }
+    /* 让位：留在原地把内容淡出，动画放完再摘类。
+       计时器挂在元素上 —— 连着扫过三四个面板时，各自的清理互不干扰。 */
+    function leave(p, dx) {
+      p.classList.remove('is-open', 'is-swap-in');
+      p.style.setProperty('--dx', dx + 'px');
+      p.classList.add('is-leaving');
+      p.setAttribute('aria-hidden', 'true');
+      clearTimeout(p._leaveT);
+      p._leaveT = setTimeout(function () { p.classList.remove('is-leaving'); }, 240);
+    }
 
     function show(trg) {
       if (open === trg) return;
-      /* 已经开着另一块面板时算「横移」：跳过帘幕动画直接接管，
-         否则鼠标在导航上扫一趟会看到一连串开合，很闪。 */
-      var swap = !!open;
-      hide(swap);
       var p = panelOf(trg);
       if (!p) return;
-      p.classList.toggle('is-swap', swap);
+      var prev = open, swap = !!prev, dx = 0;
+
+      if (prev) {
+        dx = triggers.indexOf(trg) > triggers.indexOf(prev) ? 18 : -18;
+        prev.setAttribute('aria-expanded', 'false');
+        var pp = panelOf(prev);
+        if (pp) leave(pp, dx);
+      }
+      /* 可能正巧是刚让出去、还在淡出的那一块，先把它救回来 */
+      clearTimeout(p._leaveT);
+      p.classList.remove('is-leaving');
+
+      if (swap) { p.style.setProperty('--dx', dx + 'px'); p.classList.add('is-swap-in'); }
+      else       { p.classList.remove('is-swap-in'); }
       p.classList.add('is-open');
       p.setAttribute('aria-hidden', 'false');
       trg.setAttribute('aria-expanded', 'true');
+      setBg(heightOf(p), swap);
       if (scrim) scrim.classList.add('is-on');
       if (hdr) hdr.classList.add('is-menu-open');
       open = trg;
+      /* 横移动画放完就把 is-swap-in 摘掉，恢复常态（收起时才有帘幕可播） */
+      if (swap) {
+        clearTimeout(p._swapT);
+        p._swapT = setTimeout(function () { p.classList.remove('is-swap-in'); }, 360);
+      }
     }
-    function hide(swap) {
+
+    function close() {
       if (!open) return;
       var p = panelOf(open);
       if (p) {
+        clearTimeout(p._swapT);
+        /* 横移动画还没放完就收起：先摘 is-swap-in（它关掉了 transition、
+           而且 animation-fill-mode 会把内容按住在终态），强制回流让状态落定，
+           再摘 is-open，淡出才有得播。 */
+        if (p.classList.contains('is-swap-in')) { p.classList.remove('is-swap-in'); void p.offsetWidth; }
         p.classList.remove('is-open');
-        p.classList.toggle('is-swap', !!swap);
         p.setAttribute('aria-hidden', 'true');
       }
       open.setAttribute('aria-expanded', 'false');
-      if (!swap) {
-        if (scrim) scrim.classList.remove('is-on');
-        if (hdr) hdr.classList.remove('is-menu-open');
-      }
+      if (bg) { bg.classList.remove('is-on', 'is-swap'); bg.style.removeProperty('--menu-h'); }
+      if (scrim) scrim.classList.remove('is-on');
+      if (hdr) hdr.classList.remove('is-menu-open');
       open = null; pinned = false;
     }
-    /* 事件回调不能直接接 hide —— 事件对象会被当成 swap 参数（真值） */
-    function close() { hide(); }
+
+    /* 换语言 / 改窗宽之后内容高度变了，背景要重新贴合（alignMenus 里调） */
+    remeasureMenu = function () {
+      if (!open || !bg) return;
+      var p = panelOf(open);
+      if (p) bg.style.setProperty('--menu-h', heightOf(p) + 'px');
+    };
 
     triggers.forEach(function (trg) {
       trg.addEventListener('mouseenter', function () { if (isDesktop()) { clearTimeout(closeT); show(trg); } });
@@ -308,13 +327,16 @@
         else if (!pinned) { pinned = true; }
         else { close(); }
       });
-      var p = panelOf(trg);
-      [trg, p].forEach(function (el) {
-        if (!el) return;
-        el.addEventListener('mouseleave', function () { if (!pinned) closeT = setTimeout(close, 160); });
-        el.addEventListener('mouseenter', function () { clearTimeout(closeT); });
-      });
     });
+
+    /* 收起只看「指针有没有离开顶栏」。面板是 <header> 的子节点，
+       所以导航项之间、导航项和面板之间怎么走都不会触发 mouseleave ——
+       用户要的「没离开导航栏就别收起」由 DOM 结构本身保证，不靠计时器赌。
+       留 120ms 宽限，是给擦着边缘走位留的余量。 */
+    if (hdr) {
+      hdr.addEventListener('mouseleave', function () { if (!pinned) closeT = setTimeout(close, 120); });
+      hdr.addEventListener('mouseenter', function () { clearTimeout(closeT); });
+    }
     if (scrim) scrim.addEventListener('click', close);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
     addEventListener('resize', function () { if (!isDesktop()) close(); });
@@ -444,6 +466,33 @@
     $$('.grid, .list', root || document).forEach(function (g) {
       $$('.reveal', g).forEach(function (e, i) { e.style.setProperty('--delay', Math.min(i * 70, 350) + 'ms'); });
     });
+    /* 首屏之内的直接就位，既不交给 IntersectionObserver，也不做入场动画。
+       两件事分开说：
+       · 不交给 IO —— 它的回调要等第一帧画完之后才跑，等它来加 is-in，
+         用户先看到的是一片空白再淡进来，观感就是「闪一下」。
+       · 不做动画 —— 首屏内容每次换页都淡上来一次（.9s），在手机上就是
+         「跳一下」。所以这里先把 transition 关掉再加 is-in，等画过一帧
+         再把 transition 还回去；往下滚出现的那些照旧有入场动画。 */
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var boot = [];
+    els = els.filter(function (e) {
+      if (e.getBoundingClientRect().top >= vh) return true;
+      e.style.setProperty('--delay', '0ms');
+      e.style.transition = 'none';
+      e.classList.add('is-in');
+      boot.push(e);
+      return false;
+    });
+    if (boot.length) {
+      /* 两层 rAF：确保「transition:none + is-in」这一版样式真的被画出去过一帧，
+         再解开 transition，否则解开的瞬间又会从 opacity 0 补一次过渡。 */
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          boot.forEach(function (e) { e.style.transition = ''; });
+        });
+      });
+    }
+    if (!els.length) return;
     if (!io) io = new IntersectionObserver(function (es) {
       es.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); } });
     }, { threshold: .12, rootMargin: '0px 0px -60px 0px' });
@@ -485,11 +534,7 @@
       '<p class="list__meta"><span>' + esc(T(c ? c.label : '')) + '</span><span>' + esc(fmtRead(a.read)) + '</span></p>' +
       '</div></a></article>';
   }
-  /* 角色卡：指向角色主页（固定深色那一页），不是文章 */
-  function charUrl(slug) {
-    return url('characters/' + (FILE ? 'index.html' : '') + '?c=' + encodeURIComponent(slug));
-  }
-  function charArt(c) { return url(c.art || 'assets/images/characters/' + c.slug + PH); }
+  function charArt(c) { return url(c.art || 'assets/images/characters/' + c.slug + '.png'); }
   function crumbHTML(parts) {
     var s = '<a href="' + url('home.html') + '">JasperPeng</a>';
     parts.forEach(function (p, i) {
@@ -608,7 +653,7 @@
       $('[data-related-more]').setAttribute('href', c ? catUrl(s, c.slug) : url('home.html'));
       wrap.hidden = false;
     }
-    i18n(); reveal(document); patchDirLinks(); upgradePlaceholders();
+    i18n(); reveal(document); patchDirLinks();
   }
 
   /* ---------- 09 分类页 ---------- */
@@ -652,44 +697,59 @@
       if (act) sib.scrollLeft = Math.max(0, act.offsetLeft - 20);
     }
     paintCrumbs(crumbHTML([{ label: T(s.label), href: url('home.html#' + s.key) }, { label: T(c.label) }]));
-    i18n(); reveal(document); patchDirLinks(); upgradePlaceholders();
+    i18n(); reveal(document); patchDirLinks();
   }
 
   /* ---------- 10 角色页 ----------
      原地切换 + 地址同步：浏览器返回键能逐个退回上一个角色，
      单个角色的链接也能直接分享。 */
+  /* 筛选状态和「事件已经绑过了」的标记放在函数外面：
+     换语言时 rerender() 会再调一次 renderCharacters()，
+     状态留在函数里的话，筛选会被重置，监听器还会一层层叠上去
+     —— 叠两层之后点取值胶囊等于点了两下，选中立刻被自己取消，看起来就是筛选失灵。 */
+  var charMode = 'all', charPick = null, charsBound = false;
+
   function renderCharacters() {
     var strip = $('[data-char-strip]');
     if (!strip || !CHARACTERS.length) return;
     var stage = $('[data-char-stage]');
     var filters = $$('[data-char-filter]');
     var values = $('[data-char-values]');
-    var mode = 'all', pick = null;
 
     /* 两级筛选：先选维度（年份 / 版本 / 地图），再选具体值。
        只做排序的话，数据本来就按年份排列，点了看起来毫无反应。 */
+    /* 取值不一定是字符串：year / version 是字符串，region 是四语对象。
+       所以显示走 T()，比较走一个跟语言无关的稳定键（四语对象取简体那一支）。
+       以前直接把取值当字符串用，「地图」这一维就渲染成了 [object Object]，
+       而且所有角色都并成了同一个键，筛出来永远只剩一个。 */
+    function valKey(v) { return (v && typeof v === 'object') ? (v['zh-Hans'] || '') : String(v); }
     function distinct(key) {
       var seen = {}, out = [];
       CHARACTERS.forEach(function (c) {
         var v = c[key];
-        if (v && !seen[v]) { seen[v] = 1; out.push(v); }
+        if (!v) return;
+        var k = valKey(v);
+        if (k && !seen[k]) { seen[k] = 1; out.push({ k: k, v: v }); }
       });
-      return out.sort(function (a, b) { return String(a).localeCompare(String(b), 'zh'); });
+      return out.sort(function (a, b) { return T(a.v).localeCompare(T(b.v), 'zh'); });
     }
     function paintValues() {
       if (!values) return;
-      if (mode === 'all') { values.innerHTML = ''; values.hidden = true; return; }
+      filters.forEach(function (o) {
+        o.setAttribute('aria-pressed', String(o.getAttribute('data-char-filter') === charMode));
+      });
+      if (charMode === 'all') { values.innerHTML = ''; values.hidden = true; return; }
       values.hidden = false;
-      values.innerHTML = distinct(mode).map(function (v) {
-        var n = CHARACTERS.filter(function (c) { return c[mode] === v; }).length;
-        return '<button class="chars__value" type="button" data-char-value="' + esc(v) + '"' +
-               (v === pick ? ' aria-pressed="true"' : ' aria-pressed="false"') +
-               '>' + esc(v) + '<em>' + n + '</em></button>';
+      values.innerHTML = distinct(charMode).map(function (o) {
+        var n = CHARACTERS.filter(function (c) { return valKey(c[charMode]) === o.k; }).length;
+        return '<button class="chars__value" type="button" data-char-value="' + esc(o.k) + '"' +
+               (o.k === charPick ? ' aria-pressed="true"' : ' aria-pressed="false"') +
+               '>' + esc(T(o.v)) + '<em>' + n + '</em></button>';
       }).join('');
     }
     function pool() {
-      if (mode === 'all' || !pick) return CHARACTERS.slice();
-      return CHARACTERS.filter(function (c) { return c[mode] === pick; });
+      if (charMode === 'all' || !charPick) return CHARACTERS.slice();
+      return CHARACTERS.filter(function (c) { return valKey(c[charMode]) === charPick; });
     }
     function charOf(s) {
       for (var i = 0; i < CHARACTERS.length; i++) if (CHARACTERS[i].slug === s) return CHARACTERS[i];
@@ -700,7 +760,7 @@
       strip.innerHTML = list.length ? list.map(function (c) {
         return '<button class="chars__thumb" type="button" data-char="' + c.slug + '"' +
                (c.slug === cur ? ' aria-current="true"' : '') + ' aria-label="' + esc(T(c.name)) + '">' +
-               '<img src="' + charArt(c) + '" alt="" loading="lazy"></button>';
+               '<img src="' + charArt(c) + '" alt="" loading="lazy" width="180" height="300"></button>';
       }).join('') : '<p class="chars__none">' + t('noResult') + '</p>';
       /* 筛选之后当前角色可能被推到可视区外，把它带回来 */
       var act = $('[data-char][aria-current="true"]', strip);
@@ -721,7 +781,7 @@
     }
     function select(slug, push) {
       var c = charOf(slug);
-      paintStrip(c.slug); paintStage(c); i18n(); patchDirLinks(); upgradePlaceholders();
+      paintStrip(c.slug); paintStage(c); i18n(); patchDirLinks();
       paintCrumbs(crumbHTML([
         { label: T(secOf('characters').label), href: url('home.html#characters') },
         { label: T(c.name) }
@@ -729,34 +789,38 @@
       if (push) history.pushState({ c: c.slug }, '', '?c=' + c.slug);
     }
 
-    strip.addEventListener('click', function (e) {
-      var b = e.target.closest('[data-char]');
-      if (b) select(b.getAttribute('data-char'), true);
-    });
     function currentSlug() {
       var el = $('[data-char][aria-current="true"]', strip);
       return el ? el.getAttribute('data-char') : (new URLSearchParams(location.search).get('c') || CHARACTERS[0].slug);
     }
-    filters.forEach(function (f) {
-      f.addEventListener('click', function () {
-        mode = f.getAttribute('data-char-filter');
-        pick = null;                       /* 换维度时清掉旧的取值 */
-        filters.forEach(function (o) { o.setAttribute('aria-pressed', String(o === f)); });
+
+    /* 事件只绑一次 —— 换语言会再进这个函数，再绑一遍就是叠加 */
+    if (!charsBound) {
+      charsBound = true;
+      strip.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-char]');
+        if (b) select(b.getAttribute('data-char'), true);
+      });
+      filters.forEach(function (f) {
+        f.addEventListener('click', function () {
+          charMode = f.getAttribute('data-char-filter');
+          charPick = null;                 /* 换维度时清掉旧的取值 */
+          paintValues();
+          paintStrip(currentSlug());
+        });
+      });
+      if (values) values.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-char-value]');
+        if (!b) return;
+        var v = b.getAttribute('data-char-value');
+        charPick = (charPick === v) ? null : v;   /* 再点一次取消 */
         paintValues();
         paintStrip(currentSlug());
       });
-    });
-    if (values) values.addEventListener('click', function (e) {
-      var b = e.target.closest('[data-char-value]');
-      if (!b) return;
-      var v = b.getAttribute('data-char-value');
-      pick = (pick === v) ? null : v;      /* 再点一次取消 */
-      paintValues();
-      paintStrip(currentSlug());
-    });
-    addEventListener("popstate", function () {
-      select(new URLSearchParams(location.search).get("c") || CHARACTERS[0].slug, false);
-    });
+      addEventListener('popstate', function () {
+        select(new URLSearchParams(location.search).get('c') || CHARACTERS[0].slug, false);
+      });
+    }
 
     /* 角色板块下的文章。「原创角色」分类已经改成跳到本页，
        它那两篇文章原本的列表页没了 —— 收在这里，保证站内走得到。 */
@@ -769,6 +833,7 @@
       wrap.hidden = false;
     })();
 
+    paintValues();                 /* 换语言时地图名要跟着翻译，筛选状态保持不变 */
     select(new URLSearchParams(location.search).get('c') || CHARACTERS[0].slug, false);
   }
 
@@ -855,12 +920,22 @@
     });
     $$('[data-code]', menu).forEach(function (o) {
       o.addEventListener('click', function () {
-        LANG = o.getAttribute('data-code');
-        try { localStorage.setItem('jp-lang', LANG); } catch (e) {}
+        var code = o.getAttribute('data-code');
+        box.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false');
+        if (code === LANG) return;
+        /* 换语言后整页重载（用户要求）。
+           就地重画曾经会漏：各页的渲染函数被第二次调用时，有些块（相关阅读、角色筛选器）
+           会消失，非得手动刷新才回来 —— 根子在「渲染函数不是幂等的」，
+           一处一处补容易再漏。重载最省事也最可靠：语言存在 localStorage 里，
+           查询串（?a= / ?c=）由 reload 原样保留，滚动位置浏览器自己恢复。 */
+        var saved = false;
+        try { localStorage.setItem('jp-lang', code); saved = true; } catch (e) {}
+        if (saved) { location.reload(); return; }
+        /* localStorage 被禁（无痕模式等）：存不住就不能重载，退回就地重画 */
+        LANG = code;
         paint();
         if (window.__rebuildSearch) window.__rebuildSearch();  /* 搜索索引跟着换语言 */
         rerender();                                            /* 重画本页由数据生成的内容 */
-        box.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false');
       });
     });
     document.addEventListener('click', function () { box.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); });
@@ -868,34 +943,25 @@
   })();
 
   /* ---------- 12 跳转过渡 ----------
-     支持 View Transitions 的浏览器由 CSS 的 @view-transition 接管；
-     其余浏览器走这里的淡出，观感一致。 */
-  (function pageTransition() {
-    if (reduce || 'startViewTransition' in document) return;
-    document.addEventListener('click', function (e) {
-      var a = e.target.closest && e.target.closest('a[href]');
-      if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-      if (a.target === '_blank' || a.hasAttribute('download')) return;
-      var h = a.getAttribute('href');
-      if (!h || /^(mailto:|tel:|#|javascript:)/.test(h)) return;
-      if (a.origin && a.origin !== location.origin) return;
-      if (a.pathname === location.pathname && a.search === location.search) return;
-      e.preventDefault();
-      BODY.classList.add('is-exiting');
-      setTimeout(function () { location.href = a.href; }, 240);
-    });
-    addEventListener('pageshow', function (ev) { if (ev.persisted) BODY.classList.remove('is-exiting'); });
-  })();
+     整套删掉了。以前这里会先给 body 加 is-exiting 淡出，等 240ms 再真正跳转 ——
+     不支持 View Transitions 的浏览器（比如用户的手机）每点一次链接就白等四分之一秒，
+     观感就是「卡」；支持的那一半走 CSS 的 @view-transition，又会在新页面 JS 还没渲染完
+     的那一帧被换上去，闪一下空白再跳成有内容。两条路都不划算，现在点了立刻走。
+     css/style.css 第 20 节那段同源注释里记了要加回来该改哪两处。 */
 
   /* ---------- 启动 ---------- */
   if (PAGE === 'article')          renderArticle();
   else if (PAGE === 'category')    renderCategory();
   else if (PAGE === 'characters')  renderCharacters();
+  else                             rerenderStaticCards();
+  /* 首页那几张卡是手写在 home.html 里的静态 HTML，元信息（分类名 / 阅读时长）
+     以前只在「换语言」时才由 rerenderStaticCards() 重写 —— 于是首次打开
+     简体首页会看到「News · 2026年8月18日 · 8 min read」这种中英混排。
+     启动时也走一遍，静态文案就永远跟当前语言一致了。 */
 
   i18n();
   alignMenus();
   reveal(document);
-  upgradePlaceholders();
   patchDirLinks();
   /* main.js 是 defer，静态 HTML 里的图可能在它跑起来之前就已经失败过一次，
      那时捕获监听还没挂上 —— 这里补一遍。 */

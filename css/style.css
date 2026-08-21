@@ -57,7 +57,7 @@
   --fs-caption: 13px;
 
   /* 间距 */
-  --sp-xs: 6px;  --sp-sm: 12px; --sp-md: 20px;
+  --sp-sm: 12px; --sp-md: 20px;
   --sp-lg: 32px; --sp-xl: 56px; --sp-2xl: 88px;
   --sp-section: clamp(72px, 8.6vw, 128px);
 
@@ -81,7 +81,6 @@
   --e-press: cubic-bezier(.2, .9, .3, 1.3);
   --t-fast: .18s; --t: .32s; --t-slow: .7s;
 
-  --shadow-sm: 0 1px 2px rgba(16,16,16,.05), 0 1px 3px rgba(16,16,16,.04);
   --shadow-md: 0 8px 30px rgba(16,16,16,.07);
   --shadow-lg: 0 20px 60px rgba(16,16,16,.12), 0 4px 12px rgba(16,16,16,.05);
 
@@ -100,7 +99,6 @@
     --text-muted: var(--d-muted); --text-faint: var(--d-faint);
     --border: var(--d-border); --border-2: #3A3A3E;
     --accent: #5FC2F0; --on-accent: #0B0B0C;
-    --shadow-sm: 0 1px 2px rgba(0,0,0,.5);
     --shadow-md: 0 8px 30px rgba(0,0,0,.45);
     --shadow-lg: 0 20px 60px rgba(0,0,0,.6);
   }
@@ -143,10 +141,6 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 ::selection { background: var(--text); color: var(--bg); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 5px; }
 
-.visually-hidden {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
 .skip-link {
   position: fixed; top: 12px; left: 12px; z-index: 1000;
   padding: 10px 18px; border-radius: var(--r-pill);
@@ -181,7 +175,6 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   gap: var(--sp-lg); margin-bottom: clamp(28px, 3.4vw, 44px);
 }
 .sec-head__text { max-width: 62ch; }
-.sec-foot { display: flex; justify-content: center; margin-top: clamp(36px, 4vw, 56px); }
 
 /* ---------- 05 按钮 / 图标 ---------- */
 .btn {
@@ -200,8 +193,6 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .btn--soft:hover { background: var(--bg-3); transform: translateY(-2px); }
 .btn--ghost { border: 1px solid var(--border-2); }
 .btn--ghost:hover { background: var(--bg-2); border-color: var(--text); }
-.btn--sm { min-height: 44px; padding-inline: 22px; }   /* Figma 次按钮 154×44 */
-.btn--block { display: flex; width: 100%; }
 .btn:active { transform: scale(.965); transition-timing-function: var(--e-press); transition-duration: .12s; }
 
 .link-more {
@@ -212,17 +203,15 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .link-more:hover { opacity: .62; }
 
-.arr, .arr-l {
+.arr {
   width: 18px; height: 10px; flex: none; background: currentColor;
+  -webkit-mask: var(--m-arr) center/contain no-repeat; mask: var(--m-arr) center/contain no-repeat;
   transition: transform var(--t) var(--e-out);
 }
-.arr   { -webkit-mask: var(--m-arr) center/contain no-repeat; mask: var(--m-arr) center/contain no-repeat; }
-.arr-l { -webkit-mask: var(--m-arl) center/contain no-repeat; mask: var(--m-arl) center/contain no-repeat; }
 :root {
   --m-arr: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 10'%3E%3Cpath d='M0 5h16M12 1l4 4-4 4' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  --m-arl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 10'%3E%3Cpath d='M18 5H2M6 1 2 5l4 4' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
-.btn:hover .arr, .link-more:hover .arr, .txt-link:hover .arr { transform: translateX(4px); }
+.btn:hover .arr, .link-more:hover .arr { transform: translateX(4px); }
 
 .chev {
   width: 9px; height: 9px; flex: none; opacity: .5;
@@ -314,21 +303,49 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
    所以内容左边缘对齐「顶栏第一个标签」，左侧那段留白是设计里就有的呼吸。
    这里不写死 761 —— 改成运行时量出第一个导航项的位置（见 main.js 的
    alignMenus），换语言、换字号、换视口都能对上，Figma 那组数值是其中一例。 */
-.menu {
-  position: absolute; top: 100%; left: 0; right: 0; z-index: 510;
-  width: 100%;
+/* 六块面板装在同一个舞台 .menu-stage 里，舞台自己就是那块白底。
+   舞台高度 0 → 内容高度，overflow:hidden —— 帘幕效果由高度动画本身产生，
+   面板不用再各自裁一遍，也就不会出现「旧面板比新背景高、露在白底外面」。
+
+   三种情形：
+     从无到有   高度 0 → h，内容自上而下淡入
+     面板横移   高度 h₁ → h₂ 连续补间，两块内容按指针方向横向交接；
+                帘幕一步都不播 —— 指针没离开顶栏，这块白底就一直在
+     彻底收起   高度 → 0
+
+   高度由 JS 量好写进 --menu-h（见 main.js 的 dropdowns）。
+   下边那道线用 box-shadow 画 —— border 会算进 border-box 的高度里，
+   和量出来的内容高度差 1px，接缝会露出来。 */
+.menu-stage {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 500;
+  height: 0; overflow: hidden;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  /* 帘幕式下拉：从顶边裁开，面板像是从顶栏底边「长」出来的。
-     用 clip-path 而不是 height —— 不需要 JS 量高度，也不会触发布局回流。 */
-  clip-path: inset(0 0 100% 0);
+  box-shadow: 0 1px 0 transparent;
   opacity: 0; visibility: hidden; pointer-events: none;
-  transition: clip-path .46s var(--e-out), opacity .2s var(--e-io), visibility 0s linear .46s;
+  transition: height .46s var(--e-out), opacity .2s var(--e-io),
+              box-shadow .2s var(--e-io), visibility 0s linear .46s;
+}
+.menu-stage.is-on {
+  height: var(--menu-h, 0px);
+  opacity: 1; visibility: visible; pointer-events: auto;
+  box-shadow: 0 1px 0 var(--border);
+  transition: height .46s var(--e-out), opacity .16s var(--e-io),
+              box-shadow .2s var(--e-io), visibility 0s;
+}
+/* 横移时高度补间稍快，透明度完全不动 —— 动一下就会看见闪 */
+.menu-stage.is-swap {
+  transition: height .34s var(--e-out), opacity 0s, box-shadow .2s var(--e-io), visibility 0s;
+}
+
+.menu {
+  position: absolute; top: 0; left: 0; right: 0;
+  width: 100%;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .2s var(--e-io), visibility 0s linear .2s;
 }
 .menu.is-open {
-  clip-path: inset(0 0 0 0);
   opacity: 1; visibility: visible; pointer-events: auto;
-  transition: clip-path .46s var(--e-out), opacity .2s var(--e-io), visibility 0s;
+  transition: opacity .2s var(--e-io), visibility 0s;
 }
 /* 内容块：左边缘 = 第一个导航项，右边缘 = 版心右侧。
    --menu-left 由 JS 量好写在 .hdr 上；JS 没跑起来时退回 761 定宽右对齐（Figma 值）。
@@ -347,8 +364,21 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 /* JS 没跑起来时量不到导航位置，退回 Figma 的 761 定宽右对齐 */
 html:not(.js-on) .menu__grid { width: min(var(--panel-w), 100% - var(--gutter) * 2); }
 .menu.is-open .menu__grid { opacity: 1; transform: none; }
-/* 在两个面板之间横移时不重放帘幕，直接接管 —— 否则来回扫一遍像在闪 */
-.menu.is-swap, .menu.is-swap .menu__grid { transition-duration: .16s; transition-delay: 0s; }
+
+/* 面板之间横移：帘幕一步都不重放，两块内容按指针的移动方向交接。
+   --dx 由 JS 按「往右还是往左」写进来，所以从「研究」滑到「联系」是往左送、
+   反过来是往右送，方向感和鼠标一致。 */
+.menu.is-swap-in { transition: none; }
+.menu.is-swap-in .menu__grid { animation: menuIn .34s var(--e-out) both; }
+/* 让位的那块：留在原地把内容淡出去，JS 在动画结束后摘掉这个类 */
+.menu.is-leaving {
+  opacity: 1; visibility: visible; pointer-events: none; transition: none;
+}
+.menu.is-leaving .menu__grid { animation: menuOut .2s var(--e-io) both; }
+@keyframes menuIn  { from { opacity: 0; transform: translateX(var(--dx, 18px)); }
+                     to   { opacity: 1; transform: none; } }
+@keyframes menuOut { from { opacity: 1; transform: none; }
+                     to   { opacity: 0; transform: translateX(calc(var(--dx, 18px) * -1)); } }
 /* 面板展开时顶栏转成实色，和面板连成一整块（openai 同样如此） */
 .hdr.is-menu-open { background: var(--surface); border-bottom-color: transparent; }
 .menu__kicker {
@@ -478,9 +508,17 @@ html:not(.js-on) .menu__grid { width: min(var(--panel-w), 100% - var(--gutter) *
    Figma 给的也是 420 正圆 / 2px 模糊，对得上。 */
 .star__body {
   overflow: hidden;
+  /* 圆边界靠 mask 画，不靠 overflow + border-radius ——
+     移动端 Safari 在「父元素带 filter + 3D 动画」时会把圆角丢掉、只按矩形
+     border-box 裁切，深色模式下就露出一块灰方块（README §8 bug #18）。
+     mask 是绘制阶段的裁切，filter 之后才应用，不会被跳过；
+     97%→100% 这一段顺带给边缘留了柔化，观感和原来那 2px 模糊一致。 */
+  -webkit-mask-image: radial-gradient(circle closest-side at 50% 50%, #000 97%, rgba(0,0,0,0) 100%);
+          mask-image: radial-gradient(circle closest-side at 50% 50%, #000 97%, rgba(0,0,0,0) 100%);
+  /* 底色本身也收成圆、边缘透明：万一连 mask 都不生效，露出来的也是圆不是方块 */
   background:
     radial-gradient(circle at 32% 28%, rgba(255,255,255,.96) 0%, rgba(255,255,255,.4) 34%, transparent 62%),
-    radial-gradient(circle at 50% 52%, #FBF7F4 0%, #F3F1F4 55%, #EDE9EE 100%);
+    radial-gradient(circle closest-side at 50% 50%, #FBF7F4 0%, #F3F1F4 62%, #EDE9EE 96%, rgba(237,233,238,0) 100%);
   filter: blur(2px);
   animation: orbFloat 11s var(--e-io) infinite alternate;
 }
@@ -547,7 +585,7 @@ html:not(.js-on) .menu__grid { width: min(var(--panel-w), 100% - var(--gutter) *
   :root:not([data-theme="light"]) .star__body {
     background:
       radial-gradient(circle at 32% 28%, rgba(255,255,255,.34) 0%, rgba(255,255,255,.1) 34%, transparent 62%),
-      radial-gradient(circle at 50% 52%, #23222A 0%, #1A1A20 60%, #141419 100%);
+      radial-gradient(circle closest-side at 50% 50%, #23222A 0%, #1A1A20 66%, #141419 96%, rgba(20,20,25,0) 100%);
   }
   :root:not([data-theme="light"]) .star__body i { mix-blend-mode: screen; filter: blur(38px); }
   :root:not([data-theme="light"]) .star__body::after {
@@ -571,7 +609,6 @@ html:not(.js-on) .menu__grid { width: min(var(--panel-w), 100% - var(--gutter) *
 /* ---------- 12 卡片（Figma 通用版式：1:1 图 → 标题 → 元信息）---------- */
 .grid { display: grid; gap: var(--gap-card); }
 .grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 .card { min-width: 0; }
 .card__link { display: block; -webkit-tap-highlight-color: transparent; }
@@ -579,13 +616,16 @@ html:not(.js-on) .menu__grid { width: min(var(--panel-w), 100% - var(--gutter) *
   position: relative; display: block; overflow: hidden;
   aspect-ratio: 1;                     /* Figma 全部为正方形 */
   border-radius: var(--r-md); background: var(--placeholder);
-  transition: transform var(--t) var(--e-out);
+  transition: transform var(--t) var(--e-out), box-shadow var(--t) var(--e-out);
 }
 .card__media img { width: 100%; height: 100%; object-fit: cover; transition: transform .9s var(--e-out); }
-/* openai 的卡片 hover 只有图片非常轻微地放大 —— 没有整卡上浮，也没有投影。
-   之前的 translateY(-4px) + shadow-lg 在一排卡片里显得躁。
-   时长拉长、缓动放软，是 apple 那种「慢慢定住」的手感。 */
-.card__link:hover .card__media img { transform: scale(1.035); }
+/* hover：图片块整体轻微上浮 + 一点投影，图再放大一档。
+   幅度仍然克制（-6px / 1.05），时长拉长、缓动放软，保持 apple 那种「慢慢定住」的手感。
+   只在真有指针的设备上做 —— 触屏上 :hover 会「粘住」，抬手后还留在上浮态。 */
+@media (hover: hover) and (pointer: fine) {
+  .card__link:hover .card__media { transform: translateY(-6px); box-shadow: var(--shadow-lg); }
+  .card__link:hover .card__media img { transform: scale(1.05); }
+}
 .card__link:active .card__media { transform: scale(.994); transition-duration: .12s; }
 .card__body { padding-top: var(--sp-md); }
 .card__title { font-size: var(--fs-h3); line-height: 1.3; letter-spacing: -.02em; font-weight: 550; transition: color var(--t-fast) var(--e-io); }
@@ -603,10 +643,13 @@ html:not(.js-on) .menu__grid { width: min(var(--panel-w), 100% - var(--gutter) *
 .list__link { display: grid; grid-template-columns: 180px 1fr; gap: var(--sp-md); align-items: center; -webkit-tap-highlight-color: transparent; }
 .list__media {
   aspect-ratio: 1; overflow: hidden; border-radius: var(--r-sm); background: var(--placeholder);
-  transition: transform var(--t) var(--e-out);
+  transition: transform var(--t) var(--e-out), box-shadow var(--t) var(--e-out);
 }
 .list__media img { width: 100%; height: 100%; object-fit: cover; transition: transform .9s var(--e-out); }
-.list__link:hover .list__media img { transform: scale(1.04); }
+@media (hover: hover) and (pointer: fine) {
+  .list__link:hover .list__media { transform: translateY(-5px); box-shadow: var(--shadow-md); }
+  .list__link:hover .list__media img { transform: scale(1.06); }
+}
 .list__title { font-size: 17px; line-height: 1.35; letter-spacing: -.02em; font-weight: 550; }
 .list__link:hover .list__title { color: var(--accent); }
 .list__meta { margin-top: 6px; color: var(--text-muted); font-size: var(--fs-caption); display: flex; flex-wrap: wrap; gap: 8px; }
@@ -627,7 +670,7 @@ html:not(.js-on) .menu__grid { width: min(var(--panel-w), 100% - var(--gutter) *
 }
 .cats__link:hover { background: var(--bg-2); color: var(--text); }
 .section--alt .cats__link:hover { background: var(--surface); }
-.cats__link[aria-current="page"], .cats__link.is-active { background: var(--text); color: var(--bg); }
+.cats__link[aria-current="page"] { background: var(--text); color: var(--bg); }
 .cats__link:active { transform: scale(.96); transition-duration: .12s; }
 
 /* ---------- 15 页内条（面包屑 · Figma「顶」）----------
@@ -789,7 +832,7 @@ figcaption { margin-top: 12px; text-align: center; color: var(--text-faint); fon
 .chars__reading .sec-head { margin-bottom: var(--sp-lg); }
 
 /* ---------- 19 页脚（Figma Frame 52，每页常驻）---------- */
-.ftr { border-top: 1px solid var(--border); background: var(--bg); padding-block: clamp(36px, 4.6vw, 64px) var(--sp-lg); }
+.ftr { border-top: 1px solid var(--border); background: var(--bg); padding-block: clamp(36px, 4.6vw, 64px) 84px; }   /* 底部这 84px 是给 fixed 的回顶按钮让位：滚到底时它正好压在 .ftr__bar 那一行上 */
 .ftr .crumb { padding-top: 0; padding-bottom: var(--sp-lg); }
 .ftr__grid {
   display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -802,7 +845,7 @@ figcaption { margin-top: 12px; text-align: center; color: var(--text-faint); fon
 .ftr__col a, .ftr__soon { width: fit-content; color: var(--text-muted); font-size: 14px; padding-block: 4px; transition: color var(--t-fast) var(--e-io); }
 .ftr__col a:hover { color: var(--text); }
 .ftr__soon { display: flex; align-items: center; gap: 8px; cursor: default; color: var(--text-faint); }
-.ftr__soon em { font-style: normal; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--text-muted); }
+.ftr__soon em { font-style: normal; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--text-muted); white-space: nowrap; }
 .ftr__note { color: var(--text-muted); font-size: 14px; }
 .ftr__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-md); padding-top: var(--sp-lg); border-top: 1px solid var(--border); }
 .ftr__copy { color: var(--text-muted); font-size: var(--fs-caption); }
@@ -851,28 +894,26 @@ figcaption { margin-top: 12px; text-align: center; color: var(--text-faint); fon
 .to-top:hover { background: var(--text); color: var(--bg); }
 .to-top .ico { width: 18px; height: 18px; }
 
-/* 跨页淡入淡出 */
-@view-transition { navigation: auto; }
-::view-transition-old(root) { animation: vt-out .26s var(--e-io) both; }
-::view-transition-new(root) { animation: vt-in  .40s var(--e-out) both; }
-@keyframes vt-out { to   { opacity: 0; transform: scale(.994) } }
-@keyframes vt-in  { from { opacity: 0; transform: scale(1.006) } }
-body { transition: opacity .26s var(--e-io); }
-body.is-exiting { opacity: 0; }
+/* 跨页过渡：已经整套删掉（用户反馈「加载新页面很卡，网页会闪烁跳动」）。
+   之前有两层：
+     1. @view-transition { navigation: auto } —— 跨文档视图过渡。它会先把旧页面截屏冻住，
+        再等新文档来。本站的正文是 JS 渲染的，新页面往往在「还没渲染完」的那一帧被换上去，
+        于是先闪一下空白再跳成有内容 —— 就是用户看到的闪烁跳动。
+     2. main.js 的 body.is-exiting 淡出：点链接后先等 240ms 再真正跳转。
+        不支持视图过渡的浏览器（用户的手机）走的就是这条，等于每次点击白等四分之一秒 —— 「卡」。
+   没有过渡 = 点了立刻走，是最快也最稳的观感。要加回来的话，
+   两层必须同时改：CSS 这段和 main.js 的 pageTransition。 */
 
 /* ---------- 21 响应式 ----------
    移动端重新设计层级，不是把桌面端等比缩小 */
-@media (max-width: 1180px) {
-  .grid--4 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 @media (max-width: 1024px) {
   :root { --nav-gap: 28px; --fs-nav: 16px; }
 }
 @media (max-width: 900px) {
   :root { --header-h: 60px; }
-  .nav, .menu { display: none; }
+  .nav, .menu, .menu-stage { display: none; }
   .burger { display: inline-grid; }
-  .grid--3, .grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .list { grid-template-columns: 1fr; }
   .ftr__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-lg) var(--sp-lg); }
 
@@ -884,7 +925,7 @@ body.is-exiting { opacity: 0; }
 
   /* 触摸目标补足到 44px 一线，纯靠内边距，不动版面 */
   .brand { min-height: 44px; }
-  .link-more, .txt-link { padding-block: 9px; }
+  .link-more { padding-block: 9px; }
   .crumb a, .crumb span { padding-block: 6px; }
   .ftr__col { gap: 0; }
   .ftr__col a, .ftr__soon { padding-block: 11px; }
@@ -895,9 +936,14 @@ body.is-exiting { opacity: 0; }
 }
 @media (max-width: 640px) {
   .brand__name { display: none; }
-  .grid--3, .grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-md); }
+  .grid--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-md); }
   .ftr__grid { grid-template-columns: 1fr; }
-  .ftr__bar { flex-direction: column; align-items: flex-start; }
+  /* 语言选择器留在右下角，和 JasperPeng©2026 同一行（用户要求）。
+     nowrap + 收窄按钮，保证 375 宽也不会被挤到下一行去。 */
+  .ftr__bar { flex-wrap: nowrap; align-items: center; gap: var(--sp-sm); }
+  .ftr__copy { white-space: nowrap; }
+  .lang { flex: none; }
+  .lang__btn { height: 36px; padding-inline: 11px; gap: 6px; }
   .sec-head { flex-direction: column; align-items: flex-start; gap: var(--sp-md); }
   .tagbar { border-radius: var(--r-md); }
   .tagbar__by { width: 100%; margin-left: 0; padding-top: 4px; }

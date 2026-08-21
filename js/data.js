@@ -137,12 +137,11 @@
                 'オリジナルキャラクターの設定・関係、そしてそれぞれの語り口。'),
       kicker:     L('浏览角色', '瀏覽角色', 'Explore Characters', 'キャラクターを見る'),
       featKicker: L('原创角色', '原創角色', 'OC', 'オリキャラ'),
-      landing: true,
       cats: [
         { slug: 'oc',            label: L('原创角色', '原創角色', 'OC', 'オリキャラ'), to: 'characters/',
           desc: L('原创角色设定与三视图。', '原創角色設定與三視圖。',
                   'Original character sheets and turnarounds.', 'オリジナルキャラの設定と三面図。') },
-        { slug: 'character',     label: L('角色关系', '角色關係', 'Character', '人物関係'),
+        { slug: 'character',     label: L('角色', '角色', 'Character', 'キャラクター'), to: 'characters/',
           desc: L('角色关系、性格与故事线。', '角色關係、性格與故事線。',
                   'Relationships, personalities and story lines.', '関係性・性格・ストーリーライン。') },
         { slug: 'illustrations', label: L('角色插画', '角色插畫', 'Illustrations', 'キャライラスト'),
@@ -193,9 +192,9 @@
       featKicker: L('关于我', '關於我', 'About me', '私について'),
       links: [
         { label: L('邮件', '郵件', 'Mail', 'メール'), href: 'mailto:' + MAIL },
-        { label: P('X'),       soon: true, external: true },
-        { label: P('Bluesky'), soon: true, external: true },
-        { label: P('Github'),  soon: true, external: true }
+        { label: P('X'),       soon: true },
+        { label: P('Bluesky'), soon: true },
+        { label: P('Github'),  soon: true }
       ],
       notes: [
         { kicker: L('关于我', '關於我', 'About me', '私について'),
@@ -854,13 +853,14 @@
      这里只写 slug，不写扩展名。真实文件名由 build.ps1 扫描 assets/images
      得出，写进 js/assets.js（在本文件之前加载）。
 
-     换图：把 <slug>.png（或 .jpg / .webp）丢进 assets/images/<板块目录>/。
-     占位图叫 <slug>.placeholder.svg，不占用这个名字，所以什么都不用删。
-     然后双击根目录的「刷新图片.cmd」即可；本地预览时就算不刷新，
-     main.js 也会自己探到新图（见 main.js 顶部的兜底 A / B）。 */
+     换图：找到 assets/images/<板块目录>/<slug>.jpg（少数是 .png），
+     用自己的图盖掉同名文件即可，什么都不用删、构建也不用跑。
+     换成别的扩展名的话丢进同一个目录，再双击「刷新图片.cmd」重排一次序。
+     下面那个 .png 兜底只在「清单里查不到这个 slug」时才用得上，
+     真走到那一步还有 main.js 的 img error 兜底会逐个换扩展名重试。 */
   var ASSETS = w.JP_ASSETS || {};
   function assetOf(dir, slug) {
-    return ASSETS[dir + '/' + slug] || ('assets/images/' + dir + '/' + slug + '.placeholder.svg');
+    return ASSETS[dir + '/' + slug] || ('assets/images/' + dir + '/' + slug + '.png');
   }
 
   /* 统一补全默认字段 */

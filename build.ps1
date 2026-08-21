@@ -4,8 +4,9 @@
 #        （换完图片也可以直接双击根目录的「刷新图片.cmd」）
 #
 #  依据 js/data.js，按顺序做四件事：
-#  1. 占位图：某个 slug 一张真图都没有时，生成 <slug>.placeholder.svg
-#     已经有真图（png/jpg/…）就跳过，绝不覆盖
+#  1. 占位图：某个 slug 一张真图都没有时，生成真实的 <slug>.png
+#     （图源取自 my web figma.svg 里内嵌的照片）
+#     已经有真图就跳过，绝不覆盖
 #  2. 图片清单 js/assets.js：扫 assets/images/**，记下每个 slug 实际存在的文件
 #     同一 slug 多种格式时 png > jpg > jpeg > webp > avif > gif > svg > placeholder
 #  3. 分类页：从 category.html 生成；带 to: 的分类不生成，旧目录会被删掉
@@ -277,7 +278,12 @@ function Build-Header($base) {
         <span class="burger__icon" aria-hidden="true"><span></span><span></span></span>
       </button>
     </div>
-  </div>$panels
+  </div>
+  <!-- 六块面板装在同一个舞台里：舞台就是那块白底，横移时它只把高度补间到
+       新面板的高度，不收起再展开（openai / apple 的顶栏就是这么干的，
+       见 css 的 .menu-stage 与 main.js 的 dropdowns） -->
+  <div class="menu-stage" data-menu-stage>$panels
+  </div>
 </header>
 <div class="scrim" data-scrim aria-hidden="true"></div>
 
@@ -350,128 +356,230 @@ $cols    </div>
 "@
 }
 
-# ---------- 占位图的画法（配色 + 六种图形）----------
-$palette = @{
-    'works'      = @('#EFEDE9', '#E3DDD2', '#C9BFAE', '#8E8378')
-    'research'   = @('#ECEEF2', '#DDE3EC', '#AFC0D8', '#7C8CA6')
-    'universe'   = @('#EBEFEC', '#DCE6DF', '#A8C4B4', '#75907F')
-    'characters' = @('#F0ECEE', '#E5DEE1', '#CBB8C0', '#8F7C84')
-    'resources'  = @('#EDEEEF', '#E0E3E5', '#BEC5CB', '#868D94')
-}
-function Get-Seed([string]$s) { $h = 0; foreach ($ch in $s.ToCharArray()) { $h = ($h * 31 + [int]$ch) % 100000 }; $h }
+# ---------- 占位图 ----------
+# 占位图就是真实的 <slug>.png —— 换图 = 用自己的图盖掉同名文件，
+# 不用先删占位图，也不用记什么特殊后缀。
+#
+# 图源是 my web figma.svg 里内嵌的三张照片：构建时解出来落地成真实 PNG 文件，
+# 代码里不留 base64。万一取不到（svg 被挪走了）就退回一张纯色 PNG，构建不中断。
+#
+# 麻烦在于「png 占位图」和「png 真图」同名，光看文件名分不出来。
+# 所以生成时把 SHA256 记进 assets/images/.placeholders.txt：
+#   哈希还对得上 → 还是占位图，清单里排到最后，任何真图都压得过它
+#   哈希对不上   → 用户已经把这张图换掉了，当真图处理
+Add-Type -AssemblyName System.Drawing
 
-function New-Cover([string]$slug, [string]$dir) {
-    $p = $palette[$dir]; if (-not $p) { $p = $palette['works'] }
-    $seed = Get-Seed $slug; $kind = $seed % 6
-    $a = $p[0]; $b = $p[1]; $c = $p[2]; $d = $p[3]
-    $body = switch ($kind) {
-        0 { $out=''; for ($i=0; $i -lt 5; $i++) { $rr=130+$i*62; $op=[math]::Round(0.55-$i*0.09,2)
-              $out += "  <circle cx='400' cy='430' r='$rr' fill='none' stroke='$c' stroke-width='$(14-$i*2)' opacity='$op'/>`n" }
-            $out + "  <circle cx='400' cy='430' r='72' fill='$d' opacity='0.85'/>" }
-        1 { $out=''; for ($y=0; $y -lt 4; $y++) { for ($x=0; $x -lt 4; $x++) {
-              $off=(($x+$y+$seed)%3)*14; $s2=96+(($x*$y+$seed)%3)*18; $op=[math]::Round(0.30+((($x+$y)%4)*0.14),2)
-              $out += "  <rect x='$(108+$x*148)' y='$(108+$y*148+$off)' width='$s2' height='$s2' rx='10' fill='$c' opacity='$op'/>`n" } }; $out }
-        2 { $r=200+($seed%5)*22; $cx=340+(($seed/7)%9)*18; $cy=340+(($seed/3)%9)*18
-            "  <circle cx='$cx' cy='$cy' r='$r' fill='url(#orb)'/>`n" +
-            "  <circle cx='$($cx-[math]::Round($r*0.34))' cy='$($cy-[math]::Round($r*0.34))' r='$([math]::Round($r*0.36))' fill='#FFFFFF' opacity='0.5'/>`n" +
-            "  <circle cx='$cx' cy='$cy' r='$r' fill='none' stroke='$d' stroke-width='2' opacity='0.26'/>" }
-        3 { $out=''; for ($i=0; $i -lt 7; $i++) { $w=52+(($i+$seed)%3)*30; $op=[math]::Round(0.22+(($i%3)*0.16),2)
-              $out += "  <rect x='$(-180+$i*150)' y='-220' width='$w' height='1300' fill='$c' opacity='$op' transform='rotate(24 400 400)'/>`n" }; $out }
-        4 { $out=''; for ($y=0; $y -lt 9; $y++) { for ($x=0; $x -lt 9; $x++) {
-              $rr=6+[math]::Round((($x*2+$y*3+$seed)%7)*2.6,1); $op=[math]::Round(0.24+((($x+$y+$seed)%5)*0.13),2)
-              $out += "  <circle cx='$(92+$x*77)' cy='$(92+$y*77)' r='$rr' fill='$c' opacity='$op'/>`n" } }; $out }
-        default { "  <rect x='96' y='150' width='430' height='430' rx='16' fill='$c' opacity='0.55'/>`n" +
-                  "  <rect x='214' y='236' width='430' height='430' rx='16' fill='$d' opacity='0.34'/>`n" +
-                  "  <rect x='158' y='196' width='430' height='430' rx='16' fill='none' stroke='$d' stroke-width='2' opacity='0.5'/>" }
+$IMG_EXT   = @('.png', '.jpg', '.jpeg', '.webp', '.avif', '.gif', '.svg')   # 靠前的优先
+$LEGACY_PH = '.placeholder.svg'                                            # 上一版的占位图，遇到就清掉
+
+# --- 占位图登记表 ---
+$PH_REG = Join-Path $root 'assets\images\.placeholders.txt'
+$phOld  = @{}
+if (Test-Path $PH_REG) {
+    foreach ($ln in [System.IO.File]::ReadAllLines($PH_REG)) {
+        $p = $ln.Split("`t")
+        if ($p.Count -eq 2 -and $p[1]) { $phOld[$p[0]] = $p[1].ToUpper() }
     }
-@"
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="$slug">
-  <!-- TODO: replace placeholder with final asset -->
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="$a"/><stop offset="1" stop-color="$b"/></linearGradient>
-    <radialGradient id="orb" cx="0.38" cy="0.34" r="0.72"><stop offset="0" stop-color="#FFFFFF"/><stop offset="0.45" stop-color="$c"/><stop offset="1" stop-color="$d"/></radialGradient>
-  </defs>
-  <rect width="800" height="800" fill="url(#bg)"/>
-  <g transform="rotate($($seed % 24 - 12) 400 400)">
-$body
-  </g>
-</svg>
-"@
+}
+$phNew     = [ordered]@{}
+$hashCache = @{}
+function Hash-Of([string]$full) {
+    if (-not $hashCache.ContainsKey($full)) {
+        $hashCache[$full] = (Get-FileHash -Algorithm SHA256 -LiteralPath $full).Hash.ToUpper()
+    }
+    return $hashCache[$full]
+}
+# 顺带把「确认还是占位图」的条目续写进新登记表，过期条目自然被丢掉
+function Is-Placeholder([string]$key, [string]$full) {
+    if (-not $phOld.ContainsKey($key)) { return $false }
+    if ($phOld[$key] -ne (Hash-Of $full)) { return $false }
+    $phNew[$key] = $phOld[$key]
+    return $true
+}
+
+# --- 从 Figma 稿里取图源 ---
+$seedImgs = @(); $seedsLoaded = $false
+function Get-Seeds {
+    if ($script:seedsLoaded) { return $script:seedImgs }
+    $script:seedsLoaded = $true
+    $svg = Join-Path $root 'my web figma.svg'
+    if (Test-Path $svg) {
+        try {
+            $txt = [System.IO.File]::ReadAllText($svg)
+            $mk  = 'data:image/jpeg;base64,'
+            $i   = $txt.IndexOf($mk)
+            while ($i -ge 0) {
+                $s = $i + $mk.Length
+                $e = $txt.IndexOf('"', $s)
+                if ($e -lt 0) { break }
+                try {
+                    $b  = [Convert]::FromBase64String($txt.Substring($s, $e - $s))
+                    $ms = New-Object System.IO.MemoryStream(,$b)
+                    $script:seedImgs += [System.Drawing.Image]::FromStream($ms)
+                } catch { }
+                $i = $txt.IndexOf($mk, $e)
+            }
+            $txt = $null
+        } catch { }
+    }
+    if ($script:seedImgs.Count -eq 0) { Write-Host "  （没能从 my web figma.svg 取到图源，占位图退回纯色）" }
+    return $script:seedImgs
+}
+
+# 哪个板块用第几张图源；取不到图源时用哪个底色
+$phSeed = @{ 'works' = 0; 'research' = 1; 'universe' = 0; 'characters' = 2; 'resources' = 1 }
+$phBg   = @{ 'works' = '#EFEDE9'; 'research' = '#ECEEF2'; 'universe' = '#EBEFEC'
+             'characters' = '#F0ECEE'; 'resources' = '#EDEEEF' }
+
+# mode: cover = 居中裁切铺满（卡片是 1:1）；contain = 完整放进去（立绘不许裁）
+function Save-Png($src, [int]$w, [int]$h, [string]$mode, [string]$out, [string]$bg) {
+    $bmp = New-Object System.Drawing.Bitmap($w, $h, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
+    $g   = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.PixelOffsetMode   = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.Clear([System.Drawing.ColorTranslator]::FromHtml($bg))
+    if ($src) {
+        if ($mode -eq 'cover') {
+            $dr = $w / $h
+            if (($src.Width / $src.Height) -gt $dr) { $sh = $src.Height; $sw = [int]($sh * $dr) }
+            else                                    { $sw = $src.Width;  $sh = [int]($sw / $dr) }
+            $sx = [int](($src.Width - $sw) / 2); $sy = [int](($src.Height - $sh) / 2)
+            $g.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $w, $h)),
+                               (New-Object System.Drawing.Rectangle($sx, $sy, $sw, $sh)),
+                               [System.Drawing.GraphicsUnit]::Pixel)
+        } else {
+            $k  = [Math]::Min($w / $src.Width, $h / $src.Height)
+            $dw = [int]($src.Width * $k); $dh = [int]($src.Height * $k)
+            $g.DrawImage($src, [int](($w - $dw) / 2), [int](($h - $dh) / 2), $dw, $dh)
+        }
+    }
+    $g.Dispose()
+    $bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
 }
 
 # ---------- 1. 占位图 ----------
-# 占位图叫 <slug>.placeholder.svg，不占用 <slug>.png 这个名字 ——
-# 换真图时只要把 <slug>.png 丢进同一个目录就行，不用先删掉占位图。
-$IMG_EXT = @('.png', '.jpg', '.jpeg', '.webp', '.avif', '.gif', '.svg')   # 真图，靠前的优先
-$PLACEHOLDER = '.placeholder.svg'
+$made = 0; $kept = 0; $real = 0; $swept = 0
 
-# 这个 slug 有没有真图（占位图不算）
-function Has-Real([string]$dir, [string]$slug) {
-    foreach ($e in $IMG_EXT) { if (Test-Path (Join-Path $dir ($slug + $e))) { return $true } }
-    return $false
-}
-function Ensure-Cover([string]$dir, [string]$slug, [string]$paletteKey) {
-    if (Has-Real $dir $slug) { return 'real' }
-    $ph = Join-Path $dir ($slug + $PLACEHOLDER)
-    if (Test-Path $ph) { return 'kept' }
-    [System.IO.File]::WriteAllText($ph, (New-Cover $slug $paletteKey), $U8)
+# kind: card = 400×400 方图（卡片全是 1:1）；portrait = 600×800 立绘
+function Ensure-Cover([string]$dirName, [string]$slug, [string]$kind) {
+    $dirFull = Join-Path $root ('assets\images\' + $dirName)
+    New-Item -ItemType Directory -Force -Path $dirFull | Out-Null
+
+    # 上一版的 <slug>.placeholder.svg：现在占位图是 png，遇到就清掉，别留孤儿文件
+    $legacy = Join-Path $dirFull ($slug + $LEGACY_PH)
+    if (Test-Path $legacy) { [System.IO.File]::Delete($legacy); $script:swept++ }
+
+    # 有真图就什么都不做（登记在册、哈希还对得上的那张 png 不算真图）
+    foreach ($e in $IMG_EXT) {
+        $f = Join-Path $dirFull ($slug + $e)
+        if (-not (Test-Path $f)) { continue }
+        if (Is-Placeholder ($dirName + '/' + $slug + $e) $f) { continue }
+        return 'real'
+    }
+    $png = Join-Path $dirFull ($slug + '.png')
+    if (Test-Path $png) { return 'kept' }      # 走到这儿说明它就是占位图
+
+    $seeds = Get-Seeds
+    $src   = $null
+    if ($seeds.Count) {
+        $si = 0; if ($phSeed.ContainsKey($dirName)) { $si = $phSeed[$dirName] }
+        $src = $seeds[[Math]::Min($si, $seeds.Count - 1)]
+    }
+    if ($kind -eq 'portrait') { Save-Png $src 600 800 'cover' $png '#FFFFFF' }
+    else {
+        $bg = '#EDEDED'; if ($phBg.ContainsKey($dirName)) { $bg = $phBg[$dirName] }
+        Save-Png $src 400 400 'cover' $png $bg
+    }
+    $hashCache.Remove($png)
+    $phNew[$dirName + '/' + $slug + '.png'] = (Hash-Of $png)
     return 'made'
 }
 
-$made = 0; $kept = 0; $real = 0
 foreach ($m in [regex]::Matches($data, "slug:\s*'([^']+)',\s*section:\s*'([^']+)',\s*cat:\s*'([^']+)'")) {
     $sec = $secs | Where-Object { $_.Key -eq $m.Groups[2].Value } | Select-Object -First 1
     if (-not $sec) { continue }
-    $dir = Join-Path $root ('assets\images\' + $sec.Dir)
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    switch (Ensure-Cover $dir $m.Groups[1].Value $sec.Dir) {
+    switch (Ensure-Cover $sec.Dir $m.Groups[1].Value 'card') {
         'made' { $made++ } 'kept' { $kept++ } 'real' { $real++ }
     }
 }
-$charDir = Join-Path $root 'assets\images\characters'
-New-Item -ItemType Directory -Force -Path $charDir | Out-Null
+# 角色立绘：不裁切，尺寸也不一样
 foreach ($m in [regex]::Matches($data, "slug:\s*'([^']+)',\s*name:\s*[LP]\s*\(")) {
-    switch (Ensure-Cover $charDir $m.Groups[1].Value 'characters') {
+    switch (Ensure-Cover 'characters' $m.Groups[1].Value 'portrait') {
         'made' { $made++ } 'kept' { $kept++ } 'real' { $real++ }
     }
 }
-Write-Host "占位图：新建 $made，保留 $kept；已换成真图 $real"
+
+# 首页那张 16:9 海报不在 slug 体系里，单独走一遍同样的规矩。
+# 扩展名不写死：按 $IMG_EXT 的顺序找 poster.<ext>，占位图排到最后
+# （和分类封面同一套规则），所以 poster.jpg 换掉 poster.png 也认得。
+# 一张都没有才现生成一张 poster.png。
+$posterRel  = ''
+$posterRank = [int]::MaxValue
+foreach ($e in $IMG_EXT) {
+    $p = Join-Path $root ('assets\images\poster' + $e)
+    if (-not (Test-Path $p)) { continue }
+    $r = [array]::IndexOf($IMG_EXT, $e)
+    if (Is-Placeholder ('poster' + $e) $p) { $r = $IMG_EXT.Count }
+    if ($r -lt $posterRank) { $posterRank = $r; $posterRel = 'assets/images/poster' + $e }
+}
+if ($posterRel) {
+    if ($posterRank -ge $IMG_EXT.Count) { $kept++ } else { $real++ }
+} else {
+    $posterPng = Join-Path $root 'assets\images\poster.png'
+    $seeds = Get-Seeds
+    $src = $null; if ($seeds.Count) { $src = $seeds[[Math]::Min(1, $seeds.Count - 1)] }
+    Save-Png $src 1280 720 'cover' $posterPng '#EDEDED'
+    $hashCache.Remove($posterPng)
+    $phNew['poster.png'] = (Hash-Of $posterPng)
+    $posterRel = 'assets/images/poster.png'
+    $made++
+}
+# 上一版的 poster.svg：只有在它不是当前这张海报时才清掉
+$posterSvg = Join-Path $root 'assets\images\poster.svg'
+if ((Test-Path $posterSvg) -and $posterRel -ne 'assets/images/poster.svg') {
+    [System.IO.File]::Delete($posterSvg); $swept++
+}
+
+$sweptMsg = if ($swept) { "；清掉旧的 .placeholder.svg $swept 个" } else { '' }
+Write-Host "占位图：新建 $made，保留 $kept；已换成真图 $real$sweptMsg"
 
 # ---------- 2. 图片清单 ----------
 # 扫出 assets/images 下每个 slug 真实存在的文件，写成 js/assets.js。
 # data.js 只写 slug，扩展名由这份清单决定 —— 换图不用改任何代码。
-# 同一个 slug 有多种格式时按 $IMG_EXT 的顺序取，占位图排在最后：
-# 只要目录里有 <slug>.png，它就一定压过 <slug>.placeholder.svg。
-$phRank = $IMG_EXT.Count
+# 同一个 slug 有多种格式时按 $IMG_EXT 的顺序取，占位图（哈希对得上的那些）
+# 一律排到最后：所以「丢一张 <slug>.jpg 进来」和「直接盖掉 <slug>.png」都管用。
+$phRank   = $IMG_EXT.Count
 $manifest = [ordered]@{}
 foreach ($d in (Get-ChildItem (Join-Path $root 'assets\images') -Directory)) {
     foreach ($f in (Get-ChildItem $d.FullName -File)) {
-        $name = $f.Name
-        if ($name.ToLower().EndsWith($PLACEHOLDER)) {
-            $stem = $name.Substring(0, $name.Length - $PLACEHOLDER.Length); $i = $phRank
-        } else {
-            $i = [array]::IndexOf($IMG_EXT, $f.Extension.ToLower())
-            if ($i -lt 0) { continue }
-            $stem = [System.IO.Path]::GetFileNameWithoutExtension($name)
-        }
-        $key = $d.Name + '/' + $stem
+        $i = [array]::IndexOf($IMG_EXT, $f.Extension.ToLower())
+        if ($i -lt 0) { continue }
+        if (Is-Placeholder ($d.Name + '/' + $f.Name) $f.FullName) { $i = $phRank }
+        $key = $d.Name + '/' + [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
         if ($manifest.Contains($key) -and $manifest[$key].Rank -le $i) { continue }
-        $manifest[$key] = [pscustomobject]@{ Rank = $i; Path = 'assets/images/' + $d.Name + '/' + $name }
+        $manifest[$key] = [pscustomobject]@{ Rank = $i; Path = 'assets/images/' + $d.Name + '/' + $f.Name }
     }
 }
 $rows = @()
 foreach ($k in $manifest.Keys) { $rows += ('  "' + $k + '": "' + $manifest[$k].Path + '"') }
 $assetsJs = @"
 /* 由 build.ps1 自动生成 —— 不要手改。
-   换图：把 <slug>.png / .jpg 丢进 assets/images/<板块目录>/，
-   然后双击根目录的「刷新图片.cmd」（或重跑 build.ps1）。
-   占位图 <slug>.placeholder.svg 会自动让位，不用手动删。 */
+   换图：把你的图存成同名文件盖掉 assets/images/<板块目录>/<slug>.*，
+   刷新页面就生效，连构建都不用跑。
+   要换成别的扩展名（png/jpg/webp…）才需要双击根目录的「刷新图片.cmd」
+   （或重跑 build.ps1），让这份清单重排一次序。 */
 window.JP_ASSETS = {
 $($rows -join ",`n")
 };
 "@
 [System.IO.File]::WriteAllText((Join-Path $root 'js\assets.js'), $assetsJs, $U8)
-Write-Host "图片清单：$($manifest.Count) 条 → js/assets.js"
+
+# 登记表：只留下这一轮确认过、或这一轮新建的占位图
+$regLines = @()
+foreach ($k in $phNew.Keys) { $regLines += ($k + "`t" + $phNew[$k]) }
+[System.IO.File]::WriteAllLines($PH_REG, [string[]]$regLines, $U8)
+Write-Host "图片清单：$($manifest.Count) 条 → js/assets.js（占位图 $($phNew.Count) 张在册）"
 
 # ---------- 3. 分类页 ----------
 $tpl = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'category.html')
@@ -515,12 +623,16 @@ Get-ChildItem $root -Recurse -Filter *.html |
     $html = [regex]::Replace($html, '((?:\.\./)*)assets/images/([^"/]+)/([^"]+?)"', {
         param($mm)
         $pfx = $mm.Groups[1].Value; $dir = $mm.Groups[2].Value; $file = $mm.Groups[3].Value
-        if ($file.ToLower().EndsWith($PLACEHOLDER)) { $stem = $file.Substring(0, $file.Length - $PLACEHOLDER.Length) }
+        # 上一版写的是 <slug>.placeholder.svg，这里一并认出来，迁移到新占位图
+        if ($file.ToLower().EndsWith($LEGACY_PH)) { $stem = $file.Substring(0, $file.Length - $LEGACY_PH.Length) }
         else { $stem = [System.IO.Path]::GetFileNameWithoutExtension($file) }
         $key = $dir + '/' + $stem
         if ($manifest.Contains($key)) { return $pfx + $manifest[$key].Path + '"' }
         return $mm.Value
     })
+    # 首页海报不在 slug 体系里（assets/images/poster.*），单独换一次。
+    # 静态 HTML 里写的是哪个扩展名都行，一律对齐到上面挑出来的那张。
+    if ($posterRel) { $html = [regex]::Replace($html, 'assets/images/poster\.[A-Za-z0-9]+', $posterRel) }
     # 图片清单必须排在 data.js 之前 —— data.js 生成 cover 路径时要读它
     if ($html -notmatch 'js/assets\.js') {
         $html = [regex]::Replace($html, '<script src="([^"]*)js/data\.js"></script>',
